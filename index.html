@@ -9,10 +9,7 @@
 
 <style>
 *{box-sizing:border-box;font-family:"Segoe UI",Arial,sans-serif}
-body{
-  margin:0;
-  background:#f4f6f8;
-}
+body{margin:0;background:#f4f6f8}
 header{
   background:#1976d2;
   color:#fff;
@@ -21,9 +18,7 @@ header{
   font-size:20px;
   font-weight:700;
 }
-.search-box{
-  padding:14px;
-}
+.search-box{padding:14px}
 .search-box input{
   width:100%;
   padding:12px 14px;
@@ -55,28 +50,25 @@ header{
   padding:10px 14px;
   font-weight:600;
 }
-.card-body{
-  padding:14px;
-  font-size:14px;
+.card-body{padding:14px;font-size:14px}
+.card-body div{margin-bottom:6px}
+.card-body span{font-weight:600}
+.action{
+  display:flex;
+  gap:10px;
+  margin-top:12px;
 }
-.card-body div{
-  margin-bottom:6px;
-}
-.card-body span{
-  font-weight:600;
-}
-.open-btn{
-  margin-top:10px;
-  display:block;
-  width:100%;
+.btn{
+  flex:1;
   text-align:center;
-  background:#1976d2;
-  color:#fff;
   padding:10px;
   border-radius:10px;
   text-decoration:none;
   font-weight:600;
+  color:#fff;
 }
+.open{background:#1976d2}
+.download{background:#2e7d32}
 </style>
 </head>
 
@@ -106,12 +98,18 @@ const searchEl = document.getElementById("search");
 
 let arsipData = [];
 
-/* ================= LOAD DATA STORAGE ================= */
+/* ================= FORMAT TANGGAL ================= */
+function formatTanggal(dd, mm, yyyy){
+  const bulan = [
+    "Januari","Februari","Maret","April","Mei","Juni",
+    "Juli","Agustus","September","Oktober","November","Desember"
+  ];
+  return `${dd} ${bulan[Number(mm)-1]} ${yyyy}`;
+}
+
+/* ================= LOAD DATA ================= */
 async function loadArsip(){
-  const { data, error } = await sb
-    .storage
-    .from(BUCKET)
-    .list("");
+  const { data, error } = await sb.storage.from(BUCKET).list("");
 
   if (error) {
     infoEl.textContent = "Gagal memuat arsip";
@@ -132,13 +130,19 @@ function render(data){
   data.forEach(f => {
     const namaFile = f.name.replace(".pdf","");
     const part = namaFile.split("-");
+
     const nama = part[0] || "-";
     const nip = part[1] || "-";
     const jenis = part[2] || "-";
-    const tanggal = part[3] || "-";
 
-    const { data: urlData } = sb
-      .storage
+    const dd = part[3];
+    const mm = part[4];
+    const yyyy = part[5];
+    const tanggal = (dd && mm && yyyy)
+      ? formatTanggal(dd, mm, yyyy)
+      : "-";
+
+    const { data: urlData } = sb.storage
       .from(BUCKET)
       .getPublicUrl(f.name);
 
@@ -150,9 +154,10 @@ function render(data){
         <div><span>NIP:</span> ${nip}</div>
         <div><span>Jenis:</span> ${jenis}</div>
         <div><span>Tanggal:</span> ${tanggal}</div>
-        <a class="open-btn" href="${urlData.publicUrl}" target="_blank">
-          📄 Buka Arsip
-        </a>
+        <div class="action">
+          <a class="btn open" href="${urlData.publicUrl}" target="_blank">📄 Buka Arsip</a>
+          <a class="btn download" href="${urlData.publicUrl}" download>⬇️ Download</a>
+        </div>
       </div>
     `;
     listEl.appendChild(card);
@@ -162,10 +167,9 @@ function render(data){
 /* ================= SEARCH ================= */
 searchEl.addEventListener("input", () => {
   const key = searchEl.value.toLowerCase();
-  const filtered = arsipData.filter(f =>
-    f.name.toLowerCase().includes(key)
+  render(
+    arsipData.filter(f => f.name.toLowerCase().includes(key))
   );
-  render(filtered);
 });
 
 /* ================= START ================= */
