@@ -19,8 +19,7 @@ header{
   position:absolute;left:12px;
   background:rgba(255,255,255,.2);
   border:none;color:#fff;
-  padding:8px 12px;border-radius:10px;
-  cursor:pointer
+  padding:8px 12px;border-radius:10px;cursor:pointer
 }
 .search-box{
   position:fixed;top:60px;left:0;right:0;
@@ -60,37 +59,43 @@ header{
 <body>
 
 <header>
-  <button class="back-btn" onclick="location.href='https://rikoantah.github.io/Web-Utama-UMPAR/'">← Back</button>
+  <button class="back-btn"
+    onclick="location.href='https://rikoantah.github.io/Web-Utama-UMPAR/'">
+    ← Back
+  </button>
   ARSIP UMPAR
 </header>
 
 <div class="search-box">
-  <input id="search" placeholder="🔍 Ketik nama pegawai (file lama bisa dicari)">
+  <input id="search"
+    placeholder="🔍 Cari nama pegawai (file lama tetap bisa dicari)">
 </div>
 
-<div class="info" id="info">Ketik nama untuk mulai pencarian</div>
+<div class="info" id="info">Memuat 50 arsip terbaru...</div>
 <div class="container" id="list"></div>
 
 <script>
-/* ========== KONFIGURASI ========== */
+/* ===== KONFIGURASI ===== */
 const SUPABASE_URL = "https://xmbsrxkhatebzsqeyxms.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhtYnNyeGtoYXRlYnpzcWV5eG1zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5MTU4NjYsImV4cCI6MjA4NjQ5MTg2Nn0.TJCPXhSm_XrIXIl0BgYn3LaF5O7j5zhfqghJUgJSy88";
 const BUCKET = "Arsip RSDS";
 const PAGE_SIZE = 100;
+const DEFAULT_SHOW = 50;
 
-/* ========== INIT ========== */
+/* ===== INIT ===== */
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const listEl = document.getElementById("list");
 const infoEl = document.getElementById("info");
 const searchEl = document.getElementById("search");
 
-/* ========== FORMAT TANGGAL ========== */
+/* ===== FORMAT TANGGAL ===== */
 function formatTanggal(dd, mm, yyyy){
-  const b=["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+  const b=["Januari","Februari","Maret","April","Mei","Juni",
+           "Juli","Agustus","September","Oktober","November","Desember"];
   return `${dd} ${b[Number(mm)-1]} ${yyyy}`;
 }
 
-/* ========== DOWNLOAD LANGSUNG ========== */
+/* ===== DOWNLOAD ===== */
 async function downloadLangsung(name){
   const { data } = await sb.storage.from(BUCKET)
     .createSignedUrl(name,60,{download:true});
@@ -99,47 +104,14 @@ async function downloadLangsung(name){
   document.body.appendChild(a);a.click();document.body.removeChild(a);
 }
 
-/* ========== SEARCH OPTIMIZED ========== */
-let searchTimer;
-searchEl.addEventListener("input", ()=>{
-  clearTimeout(searchTimer);
-  searchTimer=setTimeout(()=>cariArsip(searchEl.value.trim().toLowerCase()),500);
-});
-
-async function cariArsip(keyword){
-  listEl.innerHTML="";
-  if(keyword.length<2){
-    infoEl.textContent="Ketik minimal 2 huruf";
-    return;
-  }
-
-  infoEl.textContent="Mencari arsip lama & baru...";
-  let offset=0, found=0, stop=false;
-
-  while(!stop){
-    const { data, error } = await sb.storage
-      .from(BUCKET)
-      .list("",{limit:PAGE_SIZE,offset});
-
-    if(error||!data.length) break;
-
-    data.filter(f=>f.name.toLowerCase().includes(keyword))
-        .forEach(f=>renderCard(f,++found));
-
-    if(data.length<PAGE_SIZE) stop=true;
-    offset+=PAGE_SIZE;
-  }
-
-  infoEl.textContent = found
-    ? `Ditemukan ${found} arsip`
-    : "Tidak ditemukan";
-}
-
-/* ========== RENDER CARD ========== */
+/* ===== RENDER CARD ===== */
 function renderCard(f){
   const p=f.name.replace(".pdf","").split("-");
   const nama=p[0]||"-", nip=p[1]||"-", jenis=p[2]||"-";
-  const tanggal=(p[3]&&p[4]&&p[5])?formatTanggal(p[3],p[4],p[5]):"-";
+  const tanggal=(p[3]&&p[4]&&p[5])
+    ?formatTanggal(p[3],p[4],p[5])
+    :"-";
+
   const { data:url } = sb.storage.from(BUCKET).getPublicUrl(f.name);
 
   const c=document.createElement("div");
@@ -151,12 +123,69 @@ function renderCard(f){
       <div><span>Jenis:</span> ${jenis}</div>
       <div><span>Tanggal:</span> ${tanggal}</div>
       <div class="action">
-        <button class="btn open" onclick="window.open('${url.publicUrl}','_blank')">📄 Buka</button>
-        <button class="btn download" onclick="downloadLangsung('${f.name}')">⬇️ Download</button>
+        <button class="btn open"
+          onclick="window.open('${url.publicUrl}','_blank')">📄 Buka</button>
+        <button class="btn download"
+          onclick="downloadLangsung('${f.name}')">⬇️ Download</button>
       </div>
     </div>`;
   listEl.appendChild(c);
 }
+
+/* ===== MODE 1: LOAD 50 TERBARU ===== */
+async function loadTerbaru(){
+  const { data } = await sb.storage
+    .from(BUCKET)
+    .list("",{limit:DEFAULT_SHOW});
+
+  const terbaru = data
+    .filter(f=>f.name.endsWith(".pdf"))
+    .sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+
+  listEl.innerHTML="";
+  terbaru.forEach(renderCard);
+  infoEl.textContent=`Menampilkan ${terbaru.length} arsip terbaru`;
+}
+
+/* ===== MODE 2: SEARCH SEMUA FILE ===== */
+let timer;
+searchEl.addEventListener("input",()=>{
+  clearTimeout(timer);
+  timer=setTimeout(()=>cari(searchEl.value.trim().toLowerCase()),500);
+});
+
+async function cari(keyword){
+  if(keyword.length<2){
+    loadTerbaru();
+    return;
+  }
+
+  listEl.innerHTML="";
+  infoEl.textContent="Mencari di seluruh arsip...";
+
+  let offset=0, found=0;
+
+  while(true){
+    const { data } = await sb.storage
+      .from(BUCKET)
+      .list("",{limit:PAGE_SIZE,offset});
+
+    if(!data || !data.length) break;
+
+    data.filter(f=>f.name.toLowerCase().includes(keyword))
+        .forEach(f=>{renderCard(f);found++;});
+
+    if(data.length<PAGE_SIZE) break;
+    offset+=PAGE_SIZE;
+  }
+
+  infoEl.textContent = found
+    ? `Ditemukan ${found} arsip`
+    : "Tidak ditemukan";
+}
+
+/* ===== START ===== */
+loadTerbaru();
 </script>
 
 </body>
