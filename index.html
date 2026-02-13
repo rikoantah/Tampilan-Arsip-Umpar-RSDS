@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>ARSIP UMPAR</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+*{box-sizing:border-box;font-family:"Segoe UI",Arial,sans-serif}
+body{
+  margin:0;
+  background:#f4f6f8;
+}
+header{
+  background:#1976d2;
+  color:#fff;
+  padding:18px;
+  text-align:center;
+  font-size:20px;
+  font-weight:700;
+}
+.search-box{
+  padding:14px;
+}
+.search-box input{
+  width:100%;
+  padding:12px 14px;
+  border-radius:12px;
+  border:1px solid #ccc;
+  font-size:15px;
+}
+.info{
+  text-align:center;
+  font-size:13px;
+  color:#555;
+  margin-bottom:8px;
+}
+.container{
+  padding:12px;
+  display:grid;
+  grid-template-columns:1fr;
+  gap:14px;
+}
+.card{
+  background:#fff;
+  border-radius:14px;
+  box-shadow:0 6px 18px rgba(0,0,0,.12);
+  overflow:hidden;
+}
+.card-header{
+  background:#1976d2;
+  color:#fff;
+  padding:10px 14px;
+  font-weight:600;
+}
+.card-body{
+  padding:14px;
+  font-size:14px;
+}
+.card-body div{
+  margin-bottom:6px;
+}
+.card-body span{
+  font-weight:600;
+}
+.open-btn{
+  margin-top:10px;
+  display:block;
+  width:100%;
+  text-align:center;
+  background:#1976d2;
+  color:#fff;
+  padding:10px;
+  border-radius:10px;
+  text-decoration:none;
+  font-weight:600;
+}
+</style>
+</head>
+
+<body>
+
+<header>ARSIP UMPAR</header>
+
+<div class="search-box">
+  <input id="search" placeholder="Cari nama pegawai...">
+</div>
+
+<div class="info" id="info">Memuat arsip...</div>
+
+<div class="container" id="list"></div>
+
+<script>
+/* ================= KONFIGURASI ================= */
+const SUPABASE_URL = "https://xmbsrxkhatebzsqeyxms.supabase.co";
+const SUPABASE_ANON_KEY = "IeyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhtYnNyeGtoYXRlYnpzcWV5eG1zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5MTU4NjYsImV4cCI6MjA4NjQ5MTg2Nn0.TJCPXhSm_XrIXIl0BgYn3LaF5O7j5zhfqghJUgJSy88";
+const BUCKET = "Arsip RSDS";
+
+/* ================= INIT ================= */
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const listEl = document.getElementById("list");
+const infoEl = document.getElementById("info");
+const searchEl = document.getElementById("search");
+
+let arsipData = [];
+
+/* ================= LOAD DATA STORAGE ================= */
+async function loadArsip(){
+  const { data, error } = await sb.storage.from(BUCKET).list("", {
+    limit: 100,
+    sortBy: { column: "created_at", order: "desc" }
+  });
+
+  if (error) {
+    infoEl.textContent = "Gagal memuat arsip";
+    return;
+  }
+
+  arsipData = data.filter(f => f.name.endsWith(".pdf"));
+  infoEl.textContent = `Menampilkan ${arsipData.length} arsip terbaru`;
+  render(arsipData);
+}
+
+/* ================= RENDER ================= */
+function render(data){
+  listEl.innerHTML = "";
+  data.forEach(f => {
+    const namaFile = f.name.replace(".pdf","");
+    const part = namaFile.split("-");
+    const nama = part[0] || "-";
+    const nip = part[1] || "-";
+    const jenis = part[2] || "-";
+    const tanggal = part[3] || "-";
+
+    const { data: urlData } = sb
+      .storage
+      .from(BUCKET)
+      .getPublicUrl(f.name);
+
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="card-header">${nama}</div>
+      <div class="card-body">
+        <div><span>NIP:</span> ${nip}</div>
+        <div><span>Jenis:</span> ${jenis}</div>
+        <div><span>Tanggal:</span> ${tanggal}</div>
+        <a class="open-btn" href="${urlData.publicUrl}" target="_blank">
+          📄 Buka Arsip
+        </a>
+      </div>
+    `;
+    listEl.appendChild(card);
+  });
+}
+
+/* ================= SEARCH ================= */
+searchEl.addEventListener("input", () => {
+  const key = searchEl.value.toLowerCase();
+  const filtered = arsipData.filter(f =>
+    f.name.toLowerCase().includes(key)
+  );
+  render(filtered);
+});
+
+/* ================= START ================= */
+loadArsip();
+</script>
+
+</body>
+</html>
