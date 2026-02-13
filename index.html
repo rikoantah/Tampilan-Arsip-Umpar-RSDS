@@ -67,11 +67,10 @@ header{
 </header>
 
 <div class="search-box">
-  <input id="search"
-    placeholder="🔍 Cari nama pegawai (file lama tetap bisa dicari)">
+  <input id="search" placeholder="🔍 Cari nama pegawai (scan semua arsip)">
 </div>
 
-<div class="info" id="info">Memuat arsip...</div>
+<div class="info" id="info">Memuat 50 arsip terakhir...</div>
 <div class="container" id="list"></div>
 
 <script>
@@ -88,23 +87,10 @@ const listEl = document.getElementById("list");
 const infoEl = document.getElementById("info");
 const searchEl = document.getElementById("search");
 
-/* ===== FORMAT TANGGAL ===== */
-function formatTanggal(dd, mm, yyyy){
-  const b=["Januari","Februari","Maret","April","Mei","Juni",
-           "Juli","Agustus","September","Oktober","November","Desember"];
-  return `${dd} ${b[Number(mm)-1]} ${yyyy}`;
-}
-
-/* ===== AMBIL TANGGAL DARI NAMA FILE ===== */
-function getTanggalFromName(name){
-  const p=name.replace(".pdf","").split("-");
-  if(p.length<6) return null;
-  return new Date(`${p[5]}-${p[4]}-${p[3]}T00:00:00`);
-}
-
 /* ===== DOWNLOAD ===== */
 async function downloadLangsung(name){
-  const { data } = await sb.storage.from(BUCKET)
+  const { data } = await sb.storage
+    .from(BUCKET)
     .createSignedUrl(name,60,{download:true});
   const a=document.createElement("a");
   a.href=data.signedUrl;a.download=name;
@@ -114,10 +100,9 @@ async function downloadLangsung(name){
 /* ===== RENDER ===== */
 function renderCard(f){
   const p=f.name.replace(".pdf","").split("-");
-  const nama=p[0]||"-", nip=p[1]||"-", jenis=p[2]||"-";
-  const tanggal=(p[3]&&p[4]&&p[5])
-    ?formatTanggal(p[3],p[4],p[5])
-    :"–";
+  const nama=p[0]||"-";
+  const nip=p[1]||"-";
+  const jenis=p[2]||"-";
 
   const { data:url } = sb.storage.from(BUCKET).getPublicUrl(f.name);
 
@@ -128,7 +113,7 @@ function renderCard(f){
     <div class="card-body">
       <div><span>NIP:</span> ${nip}</div>
       <div><span>Jenis:</span> ${jenis}</div>
-      <div><span>Tanggal:</span> ${tanggal}</div>
+      <div><span>Upload:</span> ${new Date(f.created_at).toLocaleString("id-ID")}</div>
       <div class="action">
         <button class="btn open"
           onclick="window.open('${url.publicUrl}','_blank')">📄 Buka</button>
@@ -139,37 +124,34 @@ function renderCard(f){
   listEl.appendChild(c);
 }
 
-/* ===== MODE DEFAULT: 50 TERBARU (LOGIKA BARU) ===== */
-async function loadTerbaru(){
-  let offset=0, all=[];
+/* ===== MODE DEFAULT: 50 PALING TERAKHIR MASUK STORAGE ===== */
+async function loadTerakhir(){
+  let offset = 0;
+  let semua = [];
 
-  while(all.length<DEFAULT_SHOW){
+  while (semua.length < DEFAULT_SHOW) {
     const { data } = await sb.storage
       .from(BUCKET)
-      .list("",{limit:PAGE_SIZE,offset});
-    if(!data||!data.length) break;
-    all=all.concat(data);
-    if(data.length<PAGE_SIZE) break;
-    offset+=PAGE_SIZE;
+      .list("", { limit: PAGE_SIZE, offset });
+
+    if (!data || !data.length) break;
+
+    semua = semua.concat(data);
+    if (data.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
   }
 
-  const sorted = all
-    .filter(f=>f.name.endsWith(".pdf"))
-    .sort((a,b)=>{
-      const ta=getTanggalFromName(a.name);
-      const tb=getTanggalFromName(b.name);
-      if(ta && tb && ta.getTime()!==tb.getTime())
-        return tb-ta; // tanggal file
-      return new Date(b.created_at)-new Date(a.created_at); // waktu upload
-    })
-    .slice(0,DEFAULT_SHOW);
+  const sorted = semua
+    .filter(f => f.name.endsWith(".pdf"))
+    .sort((a,b)=> new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, DEFAULT_SHOW);
 
   listEl.innerHTML="";
   sorted.forEach(renderCard);
-  infoEl.textContent=`Menampilkan ${sorted.length} arsip terbaru`;
+  infoEl.textContent = `Menampilkan ${sorted.length} arsip terakhir (berdasarkan waktu upload)`;
 }
 
-/* ===== SEARCH: SEMUA FILE ===== */
+/* ===== SEARCH: SCAN SEMUA FILE ===== */
 let timer;
 searchEl.addEventListener("input",()=>{
   clearTimeout(timer);
@@ -178,7 +160,7 @@ searchEl.addEventListener("input",()=>{
 
 async function cari(keyword){
   if(keyword.length<2){
-    loadTerbaru();
+    loadTerakhir();
     return;
   }
 
@@ -191,9 +173,10 @@ async function cari(keyword){
     const { data } = await sb.storage
       .from(BUCKET)
       .list("",{limit:PAGE_SIZE,offset});
-    if(!data||!data.length) break;
 
-    hasil=hasil.concat(
+    if(!data || !data.length) break;
+
+    hasil = hasil.concat(
       data.filter(f=>f.name.toLowerCase().includes(keyword))
     );
 
@@ -201,22 +184,16 @@ async function cari(keyword){
     offset+=PAGE_SIZE;
   }
 
-  hasil.sort((a,b)=>{
-    const ta=getTanggalFromName(a.name);
-    const tb=getTanggalFromName(b.name);
-    if(ta && tb && ta.getTime()!==tb.getTime())
-      return tb-ta;
-    return new Date(b.created_at)-new Date(a.created_at);
-  });
-
+  hasil.sort((a,b)=> new Date(b.created_at) - new Date(a.created_at));
   hasil.forEach(renderCard);
+
   infoEl.textContent = hasil.length
     ? `Ditemukan ${hasil.length} arsip`
     : "Tidak ditemukan";
 }
 
 /* ===== START ===== */
-loadTerbaru();
+loadTerakhir();
 </script>
 
 </body>
