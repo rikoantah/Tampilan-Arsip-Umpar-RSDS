@@ -71,7 +71,7 @@ header{
     placeholder="🔍 Cari nama pegawai (file lama tetap bisa dicari)">
 </div>
 
-<div class="info" id="info">Memuat 50 arsip terbaru...</div>
+<div class="info" id="info">Memuat arsip...</div>
 <div class="container" id="list"></div>
 
 <script>
@@ -95,6 +95,13 @@ function formatTanggal(dd, mm, yyyy){
   return `${dd} ${b[Number(mm)-1]} ${yyyy}`;
 }
 
+/* ===== AMBIL TANGGAL DARI NAMA FILE ===== */
+function getTanggalFromName(name){
+  const p=name.replace(".pdf","").split("-");
+  if(p.length<6) return null;
+  return new Date(`${p[5]}-${p[4]}-${p[3]}T00:00:00`);
+}
+
 /* ===== DOWNLOAD ===== */
 async function downloadLangsung(name){
   const { data } = await sb.storage.from(BUCKET)
@@ -104,13 +111,13 @@ async function downloadLangsung(name){
   document.body.appendChild(a);a.click();document.body.removeChild(a);
 }
 
-/* ===== RENDER CARD ===== */
+/* ===== RENDER ===== */
 function renderCard(f){
   const p=f.name.replace(".pdf","").split("-");
   const nama=p[0]||"-", nip=p[1]||"-", jenis=p[2]||"-";
   const tanggal=(p[3]&&p[4]&&p[5])
     ?formatTanggal(p[3],p[4],p[5])
-    :"-";
+    :"–";
 
   const { data:url } = sb.storage.from(BUCKET).getPublicUrl(f.name);
 
@@ -132,22 +139,37 @@ function renderCard(f){
   listEl.appendChild(c);
 }
 
-/* ===== MODE 1: LOAD 50 TERBARU ===== */
+/* ===== MODE DEFAULT: 50 TERBARU (LOGIKA BARU) ===== */
 async function loadTerbaru(){
-  const { data } = await sb.storage
-    .from(BUCKET)
-    .list("",{limit:DEFAULT_SHOW});
+  let offset=0, all=[];
 
-  const terbaru = data
+  while(all.length<DEFAULT_SHOW){
+    const { data } = await sb.storage
+      .from(BUCKET)
+      .list("",{limit:PAGE_SIZE,offset});
+    if(!data||!data.length) break;
+    all=all.concat(data);
+    if(data.length<PAGE_SIZE) break;
+    offset+=PAGE_SIZE;
+  }
+
+  const sorted = all
     .filter(f=>f.name.endsWith(".pdf"))
-    .sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+    .sort((a,b)=>{
+      const ta=getTanggalFromName(a.name);
+      const tb=getTanggalFromName(b.name);
+      if(ta && tb && ta.getTime()!==tb.getTime())
+        return tb-ta; // tanggal file
+      return new Date(b.created_at)-new Date(a.created_at); // waktu upload
+    })
+    .slice(0,DEFAULT_SHOW);
 
   listEl.innerHTML="";
-  terbaru.forEach(renderCard);
-  infoEl.textContent=`Menampilkan ${terbaru.length} arsip terbaru`;
+  sorted.forEach(renderCard);
+  infoEl.textContent=`Menampilkan ${sorted.length} arsip terbaru`;
 }
 
-/* ===== MODE 2: SEARCH SEMUA FILE ===== */
+/* ===== SEARCH: SEMUA FILE ===== */
 let timer;
 searchEl.addEventListener("input",()=>{
   clearTimeout(timer);
@@ -163,24 +185,33 @@ async function cari(keyword){
   listEl.innerHTML="";
   infoEl.textContent="Mencari di seluruh arsip...";
 
-  let offset=0, found=0;
+  let offset=0, hasil=[];
 
   while(true){
     const { data } = await sb.storage
       .from(BUCKET)
       .list("",{limit:PAGE_SIZE,offset});
+    if(!data||!data.length) break;
 
-    if(!data || !data.length) break;
-
-    data.filter(f=>f.name.toLowerCase().includes(keyword))
-        .forEach(f=>{renderCard(f);found++;});
+    hasil=hasil.concat(
+      data.filter(f=>f.name.toLowerCase().includes(keyword))
+    );
 
     if(data.length<PAGE_SIZE) break;
     offset+=PAGE_SIZE;
   }
 
-  infoEl.textContent = found
-    ? `Ditemukan ${found} arsip`
+  hasil.sort((a,b)=>{
+    const ta=getTanggalFromName(a.name);
+    const tb=getTanggalFromName(b.name);
+    if(ta && tb && ta.getTime()!==tb.getTime())
+      return tb-ta;
+    return new Date(b.created_at)-new Date(a.created_at);
+  });
+
+  hasil.forEach(renderCard);
+  infoEl.textContent = hasil.length
+    ? `Ditemukan ${hasil.length} arsip`
     : "Tidak ditemukan";
 }
 
