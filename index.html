@@ -108,17 +108,20 @@ let arsipData = [];
 
 /* ================= LOAD DATA STORAGE ================= */
 async function loadArsip(){
-  const { data, error } = await sb.storage.from(BUCKET).list("", {
-    limit: 100,
-    sortBy: { column: "created_at", order: "desc" }
-  });
+  const { data, error } = await sb
+    .storage
+    .from(BUCKET)
+    .list("");
 
   if (error) {
     infoEl.textContent = "Gagal memuat arsip";
     return;
   }
 
-  arsipData = data.filter(f => f.name.endsWith(".pdf"));
+  arsipData = data
+    .filter(f => f.name.endsWith(".pdf"))
+    .sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+
   infoEl.textContent = `Menampilkan ${arsipData.length} arsip terbaru`;
   render(arsipData);
 }
